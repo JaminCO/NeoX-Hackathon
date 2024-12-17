@@ -6,9 +6,9 @@ from datetime import datetime
 from database import Base
 
 class Business(Base):
-    __tablename__ = "users"
+    __tablename__ = "businesses"
 
-    user_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False)
     business_name = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
@@ -16,28 +16,29 @@ class Business(Base):
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     wallets = relationship("Wallet", back_populates="owner")
-    payments = relationship("Payment", back_populates="user")
-    analytics = relationship("Analytics", back_populates="user")
+    payments = relationship("Payment", back_populates="business")
+    analytics = relationship("Analytics", back_populates="business")
 
 
 class Wallet(Base):
     __tablename__ = "wallets"
 
-    wallet_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
+    wallet_id = Column(String, primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, ForeignKey("businesses.user_id"), nullable=False)
     address = Column(String, unique=True, nullable=False)
     private_key = Column(String, nullable=False)
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
 
-    owner = relationship("User", back_populates="wallets")
+    owner = relationship("Business", back_populates="wallets")
 
 
 class Payment(Base):
     __tablename__ = "payments"
 
-    payment_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
+    payment_id = Column(String, primary_key=True, default=str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("businesses.user_id"), nullable=False)
     receiver_address = Column(String, nullable=False)
+    data = Column(String, nullable=True)
     amount = Column(DECIMAL(18, 8), nullable=False)
     sender_address = Column(String, nullable=False)
     status = Column(String, default="Pending")
@@ -45,15 +46,15 @@ class Payment(Base):
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    user = relationship("User", back_populates="payments")
+    business = relationship("Business", back_populates="payments")
     transactions = relationship("Transaction", back_populates="payment")
 
 
 class Transaction(Base):
     __tablename__ = "transactions"
 
-    transaction_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    payment_id = Column(UUID(as_uuid=True), ForeignKey("payments.payment_id"), nullable=False)
+    transaction_id = Column(String, primary_key=True, default=uuid.uuid4)
+    payment_id = Column(String, ForeignKey("payments.payment_id"), nullable=False)
     from_address = Column(String, nullable=False)
     to_address = Column(String, nullable=False)
     amount = Column(DECIMAL(18, 8), nullable=False)
@@ -69,10 +70,10 @@ class Transaction(Base):
 class Analytics(Base):
     __tablename__ = "analytics"
 
-    analytics_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id"), nullable=False)
+    analytics_id = Column(String, primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, ForeignKey("businesses.user_id"), nullable=False)
     total_payments = Column(Integer, default=0)
     total_revenue = Column(DECIMAL(18, 8), default=0)
     last_updated = Column(TIMESTAMP, default=datetime.utcnow)
 
-    user = relationship("User", back_populates="analytics")
+    business = relationship("Business", back_populates="analytics")
