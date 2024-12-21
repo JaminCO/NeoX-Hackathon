@@ -37,13 +37,6 @@ class LoginBusiness(BaseModel):
 #     updated_at
 
 
-class CreatePayment(BaseModel):
-    receiver_address: str
-    amount: str
-    sender_address: str
-    status: str
-    transaction_hash: str
-
 class Token(BaseModel):
     access_token: str
     token_type: str
@@ -53,8 +46,20 @@ class TokenData(BaseModel):
     sub: str = None
     exp: int = None
 
-class UserInDB(BusinessBase):
+class UserInDB(BaseModel):
+    user_id: str
+    email: str
+    business_name: str
     password_hash: str
 
 class BusinessOut(BusinessBase):
     password: str
+
+class CreateCheckoutRequest(BaseModel):
+    amount: float
+    business_id: str
+
+class InitiateCheckout(BaseModel):
+    payment_id: str
+    data: str
+    sender_address: str

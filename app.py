@@ -11,14 +11,17 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 
-from xenon import create_wallet, import_wallet
-from schema import WalletImportRequest, InitiatePaymentRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut
+from xenon import create_wallet, import_wallet, get_gas_to_usdt
+from schema import WalletImportRequest, InitiatePaymentRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut, CreateCheckoutRequest, InitiateCheckout
 from database import SessionLocal, engine, get_db
 from models import Base, Business, Wallet, Payment, Transaction, Analytics
 import monitor
+import api
 
 
 app = FastAPI(title="Crypto Wallet API")
+
+# app.include_router(business.router, prefix="/api/v1", tags=["Business API INTEGRATION ROUTES"])
 
 # Enable CORS for frontend communication
 app.add_middleware(
@@ -62,10 +65,15 @@ async def transacts(data, db):
         db.refresh(payment)
         if email in active_connections:
             websocket = active_connections[email]
+            print("DATA WS")
             await websocket.send_json(payment.status)
 
 
 # Utility Functions
+def to_dict(model):
+    """Convert SQLAlchemy model instance to dictionary."""
+    return {column.name: getattr(model, column.name) for column in model.__table__.columns}
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -74,8 +82,9 @@ def get_password_hash(password):
 
 def get_user(db, email: str):
     user = db.query(Business).filter(Business.email == email).first()
+    print(to_dict(user))
     if user:
-        return UserInDB(**user)
+        return UserInDB(**to_dict(user))
     return None
 
 def authenticate_user(db, email: str, password: str):
@@ -113,7 +122,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 # Routes
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to the Crypto Wallet API!"}
+    return {"message": "Welcome to NeoX Crypto Payment Gateway!"}
 
 
 @app.post("/users/signup", tags=["Auth"])
@@ -176,6 +185,7 @@ def create_new_wallet(db: Session = Depends(get_db), business: BusinessOut = Dep
     """
     address, private_key = create_wallet()
     wallet = Wallet(user_id=business.user_id, address=address, private_key=private_key)
+    wallet_id = wallet.wallet_id
     db.add(wallet)
     db.commit()
     db.refresh(wallet)
@@ -183,7 +193,7 @@ def create_new_wallet(db: Session = Depends(get_db), business: BusinessOut = Dep
         "wallet_address": address,
         "private_key": private_key
     }
-    return {"message": "Wallet created successfully", "wallet": wallet, "wallet_id":wallet.wallet_id}
+    return {"message": "Wallet created successfully", "wallet": wallet, "wallet_id":wallet_id}
 
 @app.post("/wallet/import", response_model=dict, tags=["Wallet"])
 def import_existing_wallet(body: WalletImportRequest, db: Session = Depends(get_db)):
@@ -196,7 +206,7 @@ def import_existing_wallet(body: WalletImportRequest, db: Session = Depends(get_
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/payment/create", response_model=dict)
+@app.post("/payment/create", response_model=dict, tags=["Payment"])
 def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     """
     API endpoint to initiate payment to business.
@@ -226,12 +236,15 @@ def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundT
     background_tasks.add_task(transacts, post_data, db)
     return {"payment_id": payment.payment_id, "merchant_address":reciever_address}
 
-@app.post("/me")
+@app.post("/me", tags=["Business"])
 async def business_details(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     data = {}
     wallets = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
     payments = db.query(Payment).filter(Payment.user_id == business.user_id).all()
-    transactions = db.query(Transaction).filter(Transaction.to_address == wallets.address).all()
+    if wallets == None:
+        transactions = []
+    else:
+        transactions = db.query(Transaction).filter(Transaction.to_address == wallets.address).all()
     analytics = db.query(Analytics).filter(Analytics.user_id == business.user_id).all()
     data["business"] = business
     data["wallets"] = wallets
@@ -252,6 +265,91 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
         print(f"WebSocket connection closed for {user_id}: {e}")
     finally:
         active_connections.pop(user_id, None)  # Remove connection on disconnect
+
+
+@app.post("/checkout/create", response_model=dict, tags=["Payment"])
+def checkout_create(body: CreateCheckoutRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db),):
+    """
+    API endpoint to initiate payment to business.
+    """
+    business_wallet = db.query(Wallet).filter(Wallet.user_id == body.business_id).first()
+    print(business_wallet)
+    if not business_wallet:
+        raise HTTPException(status_code=404, detail="No wallet related to business")
+    reciever_address = business_wallet.address
+    
+    amount = body.amount
+    
+    payment = Payment(user_id=body.business_id, receiver_address=reciever_address, amount=amount)
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+
+    url = f"http://127.0.0.1:3000/checkout/{payment.payment_id}"
+
+    post_data = {
+        "payment_id": payment.payment_id,
+        "url": url
+    }
+    return post_data
+
+@app.get("/get/{paymentId}", response_model=dict, tags=["Payment"])
+def get_payment(paymentId: str, db: Session = Depends(get_db),):
+    """
+    API endpoint to get Payment Id details.
+    """
+    payment = db.query(Payment).filter(Payment.payment_id == paymentId).first()
+    print(payment)
+    if not payment:
+        raise HTTPException(status_code=404, detail="No Payment with this ID")
+    
+    amount = payment.amount
+    total_amount = get_gas_to_usdt(amount)
+
+    post_data = {
+        "payment_id": payment.payment_id,
+        "business_name": payment.business.business_name,
+        "business_id": payment.user_id,
+        "gas_amount": amount,
+        "total_amount": total_amount,
+    }
+    return post_data
+
+@app.post("/checkout/initiate", response_model=dict, tags=["Payment"])
+def initiate_checkout_payment(Data: InitiateCheckout, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    API endpoint to Initiate Checkout Payment.
+    """
+    payment = db.query(Payment).filter(Payment.payment_id == Data.payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="No Payment with this ID")
+    payment.data = Data.data
+    payment.sender_address = Data.sender_address
+    db.commit()
+    db.refresh(payment)
+
+    amount = payment.amount
+    total_amount = get_gas_to_usdt(amount)
+
+    post_data = {
+        "sender": Data.sender_address,
+        "recv": payment.receiver_address,
+        "amount": payment.amount,
+        "email": Data.data,
+        "payment_id": Data.payment_id
+    }
+    background_tasks.add_task(transacts, post_data, db)
+
+
+    data = {
+        "payment_id": payment.payment_id,
+        "business_name": payment.business.business_name,
+        "gas_amount": payment.amount,
+        "total_amount": total_amount,
+        "merchant_address":payment.receiver_address
+    }
+
+    return data
 
 
 if __name__ == "__main__":

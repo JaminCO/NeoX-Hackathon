@@ -9,15 +9,26 @@ web3 = Web3(Web3.HTTPProvider(rpc_url))
 
 
 def get_gas_to_usdt(value):
-    if value == 0:
+    # try:
+        if value == 0:
+            return 0.0  # Return 0 directly for input value 0
+        
+        # API Request
         url = "https://min-api.cryptocompare.com/data/price?fsym=GAS&tsyms=USDT"
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raise an error for HTTP issues
         data = response.json()
-        usdt_val = data['USDT']
-        usdt_balance = (value / 10**18) * usdt_val
-        return usdt_balance
-    return value
-
+        usdt_val = data.get('USDT')  # Safely get 'USDT' value
+        if usdt_val is None:
+            return "Error: 'USDT' key not found in API response."
+        # Calculate equivalent USDT balance
+        usdt_balance = float(value) * usdt_val
+        # Format the output for readability
+        return round(usdt_balance, 6)  # Rounded to 6 decimal places
+    # except requests.exceptions.RequestException as e:
+    #     return f"API Request Error: {e}"
+    # except Exception as e:
+    #     return f"An error occurred: {e}"
 
 
 def create_wallet():

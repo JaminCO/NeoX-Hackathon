@@ -4,14 +4,16 @@ from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
 from database import Base
+import secrets
 
 class Business(Base):
     __tablename__ = "businesses"
 
-    user_id = Column(String, primary_key=True, default=uuid.uuid4)
+    user_id = Column(String, primary_key=True, default=str(uuid.uuid4()))
     email = Column(String, unique=True, nullable=False)
     business_name = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
+    api_key = Column(String, unique=True, nullable=False, default=lambda: secrets.token_urlsafe(32))
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -23,7 +25,7 @@ class Business(Base):
 class Wallet(Base):
     __tablename__ = "wallets"
 
-    wallet_id = Column(String, primary_key=True, default=uuid.uuid4)
+    wallet_id = Column(String, primary_key=True, default=str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("businesses.user_id"), nullable=False)
     address = Column(String, unique=True, nullable=False)
     private_key = Column(String, nullable=False)
@@ -40,7 +42,7 @@ class Payment(Base):
     receiver_address = Column(String, nullable=False)
     data = Column(String, nullable=True)
     amount = Column(DECIMAL(18, 8), nullable=False)
-    sender_address = Column(String, nullable=False)
+    sender_address = Column(String, nullable=True)
     status = Column(String, default="Pending")
     transaction_hash = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
@@ -53,7 +55,7 @@ class Payment(Base):
 class Transaction(Base):
     __tablename__ = "transactions"
 
-    transaction_id = Column(String, primary_key=True, default=uuid.uuid4)
+    transaction_id = Column(String, primary_key=True, default=str(uuid.uuid4()))
     payment_id = Column(String, ForeignKey("payments.payment_id"), nullable=False)
     from_address = Column(String, nullable=False)
     to_address = Column(String, nullable=False)
@@ -70,7 +72,7 @@ class Transaction(Base):
 class Analytics(Base):
     __tablename__ = "analytics"
 
-    analytics_id = Column(String, primary_key=True, default=uuid.uuid4)
+    analytics_id = Column(String, primary_key=True, default=str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("businesses.user_id"), nullable=False)
     total_payments = Column(Integer, default=0)
     total_revenue = Column(DECIMAL(18, 8), default=0)

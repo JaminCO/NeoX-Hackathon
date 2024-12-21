@@ -72,11 +72,9 @@ def monitor_transactions(address_1, address_2, target_amount):
     datas = True
     while datas:
         # Get all new pending transactions
-        print("\n Move 1")
         pending_transactions = w3.eth.get_filter_changes(filter.filter_id)
         
         # Loop through each pending transaction and check if it meets the criteria
-        print("\n Move 2")
         for tx_hash in pending_transactions:
             t_hash = f"0x{tx_hash.hex()}"
             data = check_transaction(tx_hash, address_1, address_2, target_amount)
