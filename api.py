@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, WebSocket, BackgroundTasks, statu, APIRouter
+from fastapi import FastAPI, Depends, HTTPException, WebSocket, BackgroundTasks, status, APIRouter
 import requests
 import asyncio
 
