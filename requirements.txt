@@ -84,7 +84,6 @@ python-dotenv==1.0.1
 python-jose==3.3.0
 python-multipart==0.0.19
 pyunormalize
-pywin32
 PyYAML==6.0.2
 referencing==0.35.1
 regex==2024.11.6
