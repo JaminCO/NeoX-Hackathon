@@ -15,12 +15,13 @@ from schema import WalletImportRequest, InitiatePaymentRequest, CreateBusiness, 
 from database import SessionLocal, engine, get_db
 from models import Base, Business, Wallet, Payment, Transaction, Analytics
 import monitor
+import os
 
 router = APIRouter()
 
 
 # # JWT Configuration
-SECRET_KEY = "your_secret_key"  # Use a secure, random secret key
+SECRET_KEY = os.getenv("SECRET_KEY")
 
 
 # OAuth2 scheme
@@ -30,6 +31,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 Base.metadata.create_all(bind=engine)
 
 async def transacts(data, db):
+    url = data["webhook"]
     sender_address = data["sender"]
     reciever_address = data["recv"]
     amount = data["amount"]
@@ -41,6 +43,13 @@ async def transacts(data, db):
     if result != False:
         payment.transaction_hash = result["tx_hash"]
         payment.status = "Successful"
+        db.commit()
+        db.refresh(payment)
+        data = {"receipt":result, "email":email, "payment_id":payment_id, "status":"Successful", "amount":amount, "sender":sender_address, "receiver":reciever_address, "transaction_hash":result["tx_hash"], "user_id":payment.user_id}
+        send_webhook(url, data)
+    else:
+        payment.transaction_hash = "Failed"
+        payment.status = "Failed"
         db.commit()
         db.refresh(payment)
 
@@ -74,7 +83,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 def read_root():
     return {"message": "Welcome to NeoX Crypto Payment Gateway!"}
 
-@router.post("/payment/create", response_model=dict, tags=["Payment"])
+@router.post("/payment/create", response_model=dict)
 def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     """
     API endpoint to initiate payment to business.
@@ -97,13 +106,17 @@ def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundT
         "recv": reciever_address,
         "amount": amount,
         "email": body.data,
-        "payment_id": payment.payment_id
+        "payment_id": payment.payment_id,
+        "webhook": body.webhook
     }
     background_tasks.add_task(transacts, post_data, db)
     return {"payment_id": payment.payment_id, "merchant_address":reciever_address}
 
-@router.post("/me", tags=["Business"])
+@router.post("/me")
 async def business_details(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    Get Details on Specific Business
+    """
     data = {}
     wallets = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
     payments = db.query(Payment).filter(Payment.user_id == business.user_id).all()

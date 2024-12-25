@@ -5,14 +5,16 @@ import asyncio
 
 from sqlalchemy.orm import Session
 import uuid
+import os
+import secrets
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 
-from xenon import create_wallet, import_wallet, get_gas_to_usdt
-from schema import WalletImportRequest, InitiatePaymentRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut, CreateCheckoutRequest, InitiateCheckout
+from xenon import create_wallet, import_wallet, get_gas_to_usdt, get_wallet_balances
+from schema import WalletImportRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut, CreateCheckoutRequest, InitiateCheckout
 from database import SessionLocal, engine, get_db
 from models import Base, Business, Wallet, Payment, Transaction, Analytics
 import monitor
@@ -21,7 +23,7 @@ import api
 
 app = FastAPI(title="Crypto Wallet API")
 
-# app.include_router(business.router, prefix="/api/v1", tags=["Business API INTEGRATION ROUTES"])
+app.include_router(api.router, prefix="/api/v1", tags=["API V1"])
 
 # Enable CORS for frontend communication
 app.add_middleware(
@@ -33,7 +35,7 @@ app.add_middleware(
 )
 
 # # JWT Configuration
-SECRET_KEY = "your_secret_key"  # Use a secure, random secret key
+SECRET_KEY = os.getenv("SECRET_KEY")  # Use a secure, random secret key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60*24
 
@@ -54,22 +56,23 @@ async def transacts(data, db):
     email = data["email"]
     payment_id = data["payment_id"]
     payment = db.query(Payment).filter(Payment.payment_id == payment_id).first()
-    print("Payment Data Found")
 
     result = monitor.monitor_transactions(sender_address, reciever_address, amount)
     if result != False:
-        print(result,"DONE")
         payment.transaction_hash = result["tx_hash"]
         payment.status = "Successful"
         db.commit()
         db.refresh(payment)
         if email in active_connections:
             websocket = active_connections[email]
-            print("DATA WS")
             await websocket.send_json(payment.status)
 
 
 # Utility Functions
+def generate_api_key():
+    """Generate a secure API key."""
+    return secrets.token_urlsafe(32)
+
 def to_dict(model):
     """Convert SQLAlchemy model instance to dictionary."""
     return {column.name: getattr(model, column.name) for column in model.__table__.columns}
@@ -82,7 +85,6 @@ def get_password_hash(password):
 
 def get_user(db, email: str):
     user = db.query(Business).filter(Business.email == email).first()
-    print(to_dict(user))
     if user:
         return UserInDB(**to_dict(user))
     return None
@@ -134,11 +136,20 @@ def create_user(body: CreateBusiness, db: Session = Depends(get_db)):
             detail="Business with this email already exists"
         )
     hashed_password = get_password_hash(body.password)
-    user = Business(email=body.email, business_name=body.business_name, password_hash=hashed_password)
+    api_key = generate_api_key()
+    user = Business(
+        email=body.email, 
+        business_name=body.business_name, 
+        password_hash=hashed_password,
+        api_key=api_key
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {"user_id": user.user_id}
+    return {
+        "user_id": user.user_id,
+        "api_key": api_key
+    }
 
 @app.post("/login", response_model=Token, tags=["Auth"])
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -183,6 +194,13 @@ def create_new_wallet(db: Session = Depends(get_db), business: BusinessOut = Dep
     """
     API endpoint to create a new crypto wallet.
     """
+    # Check if business already has a wallet
+    existing_wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+    if existing_wallet:
+        raise HTTPException(
+            status_code=400,
+            detail="Business already has a wallet"
+        )
     address, private_key = create_wallet()
     wallet = Wallet(user_id=business.user_id, address=address, private_key=private_key)
     wallet_id = wallet.wallet_id
@@ -196,45 +214,41 @@ def create_new_wallet(db: Session = Depends(get_db), business: BusinessOut = Dep
     return {"message": "Wallet created successfully", "wallet": wallet, "wallet_id":wallet_id}
 
 @app.post("/wallet/import", response_model=dict, tags=["Wallet"])
-def import_existing_wallet(body: WalletImportRequest, db: Session = Depends(get_db)):
+def import_existing_wallet(body: WalletImportRequest, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     """
     API endpoint to import an existing wallet using a private key.
     """
     try:
+        existing_wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+        if existing_wallet:
+            raise HTTPException(
+                status_code=400,
+                detail="Business already has a wallet"
+            )
         wallet = import_wallet(body.private_key)
+        wallet = Wallet(user_id=business.user_id, address=wallet["wallet_address"], private_key=body.private_key)
+        db.add(wallet)
+        db.commit()
+        db.refresh(wallet)
         return {"message": "Wallet imported successfully", "wallet": wallet}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post("/payment/create", response_model=dict, tags=["Payment"])
-def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+@app.get("/wallet/balance", response_model=dict, tags=["Wallet"])
+def get_wallet_balance(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     """
-    API endpoint to initiate payment to business.
+    API endpoint to get wallet balances for the business's wallet.
     """
-    business_wallet = db.query(Wallet).filter(Wallet.user_id == body.business_id).first()
-    print(business_wallet)
-    if not business_wallet:
-        raise HTTPException(status_code=404, detail="No wallet related to business")
-    reciever_address = business_wallet.address
-    
-    amount = body.amount
-    
-    sender_address = body.sender_address
-    payment = Payment(user_id=body.business_id, data=body.data, receiver_address=reciever_address, amount=amount, sender_address=sender_address)
-    db.add(payment)
-    db.commit()
-    db.refresh(payment)
-    print("Payment Created in DB")
-
-    post_data = {
-        "sender": sender_address,
-        "recv": reciever_address,
-        "amount": amount,
-        "email": body.data,
-        "payment_id": payment.payment_id
+    wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="No wallet found for this business")
+        
+    balances = get_wallet_balances(wallet.address)
+    return {
+        "wallet_address": wallet.address,
+        "balances": balances
     }
-    background_tasks.add_task(transacts, post_data, db)
-    return {"payment_id": payment.payment_id, "merchant_address":reciever_address}
+
 
 @app.post("/me", tags=["Business"])
 async def business_details(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
@@ -246,34 +260,24 @@ async def business_details(db: Session = Depends(get_db), business: BusinessOut 
     else:
         transactions = db.query(Transaction).filter(Transaction.to_address == wallets.address).all()
     analytics = db.query(Analytics).filter(Analytics.user_id == business.user_id).all()
+    balances = get_wallet_balances(wallets.address)
+    data["balances"] = balances
     data["business"] = business
+    data["num_of_payments"] = len(payments)
+    data["num_of_transactions"] = len(transactions)
     data["wallets"] = wallets
     data["payment"] = payments
     data["transaction"] = transactions
     data["analytics"] = analytics
     return data
 
-@app.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    await websocket.accept()
-    active_connections[user_id] = websocket  # Store the connection
-    try:
-        while True:
-            # Keep the connection open
-            await asyncio.sleep(200)
-    except Exception as e:
-        print(f"WebSocket connection closed for {user_id}: {e}")
-    finally:
-        active_connections.pop(user_id, None)  # Remove connection on disconnect
-
 
 @app.post("/checkout/create", response_model=dict, tags=["Payment"])
-def checkout_create(body: CreateCheckoutRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db),):
+def checkout_create(body: CreateCheckoutRequest, db: Session = Depends(get_db),):
     """
     API endpoint to initiate payment to business.
     """
     business_wallet = db.query(Wallet).filter(Wallet.user_id == body.business_id).first()
-    print(business_wallet)
     if not business_wallet:
         raise HTTPException(status_code=404, detail="No wallet related to business")
     reciever_address = business_wallet.address
@@ -299,7 +303,6 @@ def get_payment(paymentId: str, db: Session = Depends(get_db),):
     API endpoint to get Payment Id details.
     """
     payment = db.query(Payment).filter(Payment.payment_id == paymentId).first()
-    print(payment)
     if not payment:
         raise HTTPException(status_code=404, detail="No Payment with this ID")
     
@@ -351,6 +354,30 @@ def initiate_checkout_payment(Data: InitiateCheckout, background_tasks: Backgrou
 
     return data
 
+@app.post("/regenerate-api-key", tags=["Business"])
+async def regenerate_api_key(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    Regenerate API key for the authenticated business.
+    """
+    try:
+        # Generate new API key
+        new_api_key = generate_api_key()
+        
+        # Update the business record
+        business_record = db.query(Business).filter(Business.user_id == business.user_id).first()
+        business_record.api_key = new_api_key
+        db.commit()
+        db.refresh(business_record)
+        
+        return {
+            "message": "API key regenerated successfully",
+            "api_key": new_api_key
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to regenerate API key"
+        )
 
 if __name__ == "__main__":
     import uvicorn

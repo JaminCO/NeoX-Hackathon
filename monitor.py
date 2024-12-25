@@ -8,6 +8,7 @@ from web3.providers.persistent import (
     WebSocketProvider,
 )
 import requests
+from datetime import datetime
 
 # # Wallet or contract address to monitor
 rpc_url = "https://neoxt4seed1.ngd.network"
@@ -54,47 +55,59 @@ def check_transaction(tx_hash, sender_address, receiver_address, target_amount):
             # Check if the transaction is between the two addresses and the amount is correct
             if (tx['from'].lower() == sender_address.lower() and tx['to'].lower() == receiver_address.lower()):
                 if vals == target_amount:
-                    print(f"Transaction found: {t_hash}")
-                    print(f"From: {tx['from']}")
-                    print(f"To: {tx['to']}")
-                    print(f"Amount: {tx['value'] / 10**18} GAS")
-                    print(f"Amount: {get_gas_to_usdt(tx['value'])} USDT \n")
+                    # print(f"Transaction found: {t_hash}")
+                    # print(f"From: {tx['from']}")
+                    # print(f"To: {tx['to']}")
+                    # print(f"Amount: {tx['value'] / 10**18} GAS")
+                    # print(f"Amount: {get_gas_to_usdt(tx['value'])} USDT \n")
                     return tx
     except Exception as e:
         print(f"Error fetching transaction {tx_hash}: {e}")
     return False
 
 # Poll for new pending transactions
-def monitor_transactions(address_1, address_2, target_amount):
-    filter = w3.eth.filter('pending')
-    print("Starting...")
-    
-    datas = True
-    while datas:
-        # Get all new pending transactions
-        pending_transactions = w3.eth.get_filter_changes(filter.filter_id)
-        
-        # Loop through each pending transaction and check if it meets the criteria
-        for tx_hash in pending_transactions:
-            t_hash = f"0x{tx_hash.hex()}"
-            data = check_transaction(tx_hash, address_1, address_2, target_amount)
-            if data:
-                print(f"Transaction {t_hash} matches criteria. Waiting for confirmation...")
-                # Wait for transaction to be mined
-                receipt = None
-                while not receipt:
-                    time.sleep(2)
-                    receipt = monitor_confirmed_transactions(tx_hash)
+def monitor_transactions(address_1, address_2, target_amount, timeout=600):
+    start_time = datetime.now()
 
-                # Confirm successful mining
-                if receipt['status'] == 1:
-                    print(f"Transaction {t_hash} successfully mined and confirmed.")
-                    return {"receipt":receipt, "tx_hash":t_hash}
-                    datas = False
-                    break
-                else:
-                    print(f"Transaction {t_hash} failed.")
-                    return False
-                datas = False
-                break
-    return False
+    info = False
+    datas = True
+    filter_id = None
+    try:
+
+        filter = w3.eth.filter('pending')
+        filter_id = filter.filter_id
+        while (datetime.now() - start_time).total_seconds() < timeout:
+            while datas:
+                # Get all new pending transactions
+                pending_transactions = w3.eth.get_filter_changes(filter.filter_id)
+                
+                # Loop through each pending transaction and check if it meets the criteria
+                for tx_hash in pending_transactions:
+                    t_hash = f"0x{tx_hash.hex()}"
+                    data = check_transaction(tx_hash, address_1, address_2, target_amount)
+                    if data:
+                        # print(f"Transaction {t_hash} matches criteria. Waiting for confirmation...")
+                        # Wait for transaction to be mined
+                        receipt = None
+                        while not receipt:
+                            time.sleep(2)
+                            receipt = monitor_confirmed_transactions(tx_hash)
+
+                        # Confirm successful mining
+                        if receipt['status'] == 1:
+                            print(f"Transaction {t_hash} successfully mined and confirmed.")
+                            info = {"receipt":receipt, "tx_hash":t_hash}
+                            datas = False
+                            break
+                        else:
+                            print(f"Transaction {t_hash} failed.")
+                            info = False
+                        datas = False
+                        break
+        return info
+    finally:
+            if filter_id:
+                try:
+                    self.w3.eth.uninstall_filter(filter_id)
+                except:
+                    pass

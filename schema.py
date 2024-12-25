@@ -8,6 +8,7 @@ class InitiatePaymentRequest(BaseModel):
     data: str
     sender_address: str
     business_id: str
+    webhook: str
 
 class BusinessBase(BaseModel):
     user_id: str

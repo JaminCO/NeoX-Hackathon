@@ -36,8 +36,8 @@ def create_wallet():
     new_account = web3.eth.account.create()
 
     # Display Account Details
-    print(f"Address: {new_account.address}")
-    print(f"Private Key: {new_account.key.hex()}")
+    # print(f"Address: {new_account.address}")
+    # print(f"Private Key: {new_account.key.hex()}")
     return new_account.address, new_account.key.hex()
 
     # Note: Save the private key securely. Losing it means losing access to the account.
@@ -50,22 +50,19 @@ def import_wallet(private_key_user):
     account = Account.from_key(private_key)
 
     # Wallet details
-    print("Wallet Address:", account.address)
-
+    
     # Check balance
     balance = web3.eth.get_balance(account.address) / 10**18
     usdt_balance = get_gas_to_usdt(balance)
-    print("Wallet Balance (USDT):", usdt_balance)
-    print("Wallet Balance (GAS):", balance)
     return {"wallet_address":account.address, "USDT":usdt_balance, "GAS":balance}
 
 
 def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ether):
     # Check if connected
     if web3.is_connected():
-        print("Connected to Neo X")
+        pass
     else:
-        print("Connection failed")
+        pass
         return 0
 
     amount_in_wei = web3.to_wei(amount_in_ether, 'ether')
@@ -93,10 +90,72 @@ def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ethe
     tx_hash = web3.eth.send_raw_transaction(signed_tx.raw_transaction)
 
     # Get the transaction hash
-    print(f"Transaction hash: {web3.to_hex(tx_hash)}")
+    # print(f"Transaction hash: {web3.to_hex(tx_hash)}")
 
     # Optional: Wait for the transaction receipt (to confirm it was mined)
     receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
-    print(f"Transaction receipt: {receipt}")
+    # print(f"Transaction receipt: {receipt}")
 
     return receipt
+
+# from eth_abi import decode
+# import json
+
+# # Add this near the top with other constants
+# # Example token contract addresses on NeoX (replace with actual addresses)
+# TOKEN_CONTRACTS = {
+#     "USDT": "0x24222633A8A20A34A7A8eF3ae0Cd3dF2fE36b548",  # Replace with actual USDT contract
+#     # Add other tokens as needed
+# }
+
+# # Standard ERC20 ABI for token balance checking
+# ERC20_ABI = json.loads('''[
+#     {
+#         "constant": true,
+#         "inputs": [{"name": "_owner", "type": "address"}],
+#         "name": "balanceOf",
+#         "outputs": [{"name": "balance", "type": "uint256"}],
+#         "type": "function"
+#     },
+#     {
+#         "constant": true,
+#         "inputs": [],
+#         "name": "decimals",
+#         "outputs": [{"name": "", "type": "uint8"}],
+#         "type": "function"
+#     }
+# ]''')
+
+def get_wallet_balances(wallet_address):
+    """
+    Get GAS and token balances for a wallet address
+    Returns a dictionary with token symbols and their balances
+    """
+    balances = {}
+    
+    # Get GAS balance
+    gas_balance = web3.eth.get_balance(wallet_address) / 10**18
+    balances["GAS"] = gas_balance
+    balances["USDT"] = get_gas_to_usdt(gas_balance)
+    
+    # Get other token balances
+    # for token_symbol, contract_address in TOKEN_CONTRACTS.items():
+    #     try:
+    #         # Create contract instance
+    #         contract = web3.eth.contract(address=contract_address, abi=ERC20_ABI)
+            
+    #         # Get token decimals
+    #         decimals = contract.functions.decimals().call()
+            
+    #         # Get raw balance
+    #         raw_balance = contract.functions.balanceOf(wallet_address).call()
+            
+    #         # Convert to proper decimal places
+    #         token_balance = raw_balance / (10 ** decimals)
+            
+    #         balances[token_symbol] = token_balance
+            
+    #     except Exception as e:
+    #         balances[token_symbol] = f"Error: {str(e)}"
+    
+    return balances

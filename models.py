@@ -17,6 +17,13 @@ class Business(Base):
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
+    # website = db.Column(db.String(200))
+    # integration_type = db.Column(db.String(50))
+    # monthly_volume = db.Column(db.String(50))
+    # business_type = db.Column(db.String(50))
+    # country = db.Column(db.String(50))
+
     wallets = relationship("Wallet", back_populates="owner")
     payments = relationship("Payment", back_populates="business")
     analytics = relationship("Analytics", back_populates="business")
