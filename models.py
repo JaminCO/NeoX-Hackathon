@@ -9,7 +9,7 @@ import secrets
 class Business(Base):
     __tablename__ = "businesses"
 
-    user_id = Column(String, primary_key=True, default=str(uuid.uuid4()))
+    user_id = Column(String, primary_key=True)
     email = Column(String, unique=True, nullable=False)
     business_name = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
@@ -18,11 +18,11 @@ class Business(Base):
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
-    # website = db.Column(db.String(200))
-    # integration_type = db.Column(db.String(50))
-    # monthly_volume = db.Column(db.String(50))
-    # business_type = db.Column(db.String(50))
-    # country = db.Column(db.String(50))
+    # website = Column(String, nullable=False)
+    # integration_type = Column(String, nullable=False)
+    # monthly_volume = Column(String, nullable=False)
+    # business_type = Column(String, nullable=False)
+    # country = Column(String, nullable=False)
 
     wallets = relationship("Wallet", back_populates="owner")
     payments = relationship("Payment", back_populates="business")

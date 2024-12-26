@@ -138,6 +138,7 @@ def create_user(body: CreateBusiness, db: Session = Depends(get_db)):
     hashed_password = get_password_hash(body.password)
     api_key = generate_api_key()
     user = Business(
+        user_id=str(uuid.uuid4()),
         email=body.email, 
         business_name=body.business_name, 
         password_hash=hashed_password,
@@ -165,7 +166,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
                                        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post('/token', summary="Create access and refresh tokens for user", response_model=Token, tags=["Auth"])
+@app.post('/users/token', summary="Create access and refresh tokens for user", response_model=Token, tags=["Auth"])
 async def login_token(data: LoginBusiness, db: Session = Depends(get_db)):
     result = db.query(Business).filter(Business.email == data.email).first()
 
@@ -379,6 +380,6 @@ async def regenerate_api_key(db: Session = Depends(get_db), business: BusinessOu
             detail="Failed to regenerate API key"
         )
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True)
