@@ -96,7 +96,7 @@ def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundT
     amount = body.amount
     
     sender_address = body.sender_address
-    payment = Payment(user_id=body.business_id, data=body.data, receiver_address=reciever_address, amount=amount, sender_address=sender_address)
+    payment = Payment(payment_id=str(uuid.uuid4()), user_id=body.business_id, data=body.data, receiver_address=reciever_address, amount=amount, sender_address=sender_address)
     db.add(payment)
     db.commit()
     db.refresh(payment)
@@ -112,27 +112,7 @@ def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundT
     background_tasks.add_task(transacts, post_data, db)
     return {"payment_id": payment.payment_id, "merchant_address":reciever_address}
 
-@router.post("/me")
-async def business_details(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
-    """
-    Get Details on Specific Business
-    """
-    data = {}
-    wallets = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
-    payments = db.query(Payment).filter(Payment.user_id == business.user_id).all()
-    if wallets == None:
-        transactions = []
-    else:
-        transactions = db.query(Transaction).filter(Transaction.to_address == wallets.address).all()
-    analytics = db.query(Analytics).filter(Analytics.user_id == business.user_id).all()
-    data["business"] = business
-    data["wallets"] = wallets
-    data["payment"] = payments
-    data["transaction"] = transactions
-    data["analytics"] = analytics
-    return data
-
-@router.get("/get/{paymentId}", response_model=dict, tags=["Payment"])
+@router.get("/payment/{paymentId}", response_model=dict)
 def get_payment(paymentId: str, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     """
     API endpoint to get Payment Id details.
@@ -140,7 +120,9 @@ def get_payment(paymentId: str, db: Session = Depends(get_db), business: Busines
     payment = db.query(Payment).filter(Payment.payment_id == paymentId).first()
     if not payment:
         raise HTTPException(status_code=404, detail="No Payment with this ID")
-    
+    if business.user_id != payment.user_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to view this payment")
+
     amount = payment.amount
     total_amount = get_gas_to_usdt(amount)
 
@@ -151,4 +133,55 @@ def get_payment(paymentId: str, db: Session = Depends(get_db), business: Busines
         "gas_amount": amount,
         "total_amount": total_amount,
     }
+    return post_data
+
+@router.get("/payment/status/{paymentId}", response_model=dict)
+def payment_status(paymentId: str, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    API endpoint to get Payment Id details.
+    """
+    payment = db.query(Payment).filter(Payment.payment_id == paymentId).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="No Payment with this ID")
+    if business.user_id != payment.user_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to view this payment")
+
+    post_data = {
+        "payment_id": payment.payment_id,
+        "status": payment.status,
+        "transaction_hash": payment.transaction_hash,
+    }
+
+    return post_data
+
+@router.get("/transaction/{transactionId}", response_model=dict)
+def transaction_details(transactionId: str, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    API endpoint to get Transaction Id details.
+    """
+    transaction = db.query(Transaction).filter(Transaction.transaction_id == transactionId).first()
+    business_wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404, detail="No Transaction with this ID")
+    if business_wallet.address != transaction.to_address:
+        raise HTTPException(status_code=403, detail="You are not authorized to view this transaction")
+
+    post_data = to_dict(transaction)
+
+    return post_data
+
+@router.get("/transaction/to/{wallet_address}", response_model=dict)
+def wallet_transactions(wallet_address: str, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    API endpoint to get Transaction to a wallet address.
+    """
+    transaction = db.query(Transaction).filter(Transaction.to_address == wallet_address).first()
+    business_wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+    if not transaction:
+        raise HTTPException(status_code=404, detail="No Transaction to this wallet address")
+    if business_wallet.address != transaction.to_address:
+        raise HTTPException(status_code=403, detail="You are not authorized to view this transaction")
+
+    post_data = to_dict(transaction)
+
     return post_data

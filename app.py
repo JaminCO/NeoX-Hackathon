@@ -35,7 +35,7 @@ app.add_middleware(
 )
 
 # # JWT Configuration
-SECRET_KEY = os.getenv("SECRET_KEY")  # Use a secure, random secret key
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60*24
 
@@ -147,6 +147,16 @@ def create_user(body: CreateBusiness, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    address, private_key = create_wallet()
+    wallet = Wallet(user_id=user.user_id, address=address, private_key=private_key)
+    db.add(wallet)
+    db.commit()
+    db.refresh(wallet)
+    wallet = {
+        "wallet_address": address,
+        "private_key": private_key
+    }
     return {
         "user_id": user.user_id,
         "api_key": api_key
@@ -251,41 +261,43 @@ def get_wallet_balance(db: Session = Depends(get_db), business: BusinessOut = De
     }
 
 
-@app.post("/me", tags=["Business"])
-async def business_details(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+@app.get("/dashboard", tags=["Business"])
+async def dashboard_details(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     data = {}
     wallets = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
     payments = db.query(Payment).filter(Payment.user_id == business.user_id).all()
     if wallets == None:
-        transactions = []
+        return {"message": "Create wallet", "status": 430}
     else:
         transactions = db.query(Transaction).filter(Transaction.to_address == wallets.address).all()
-    analytics = db.query(Analytics).filter(Analytics.user_id == business.user_id).all()
     balances = get_wallet_balances(wallets.address)
     data["balances"] = balances
     data["business"] = business
     data["num_of_payments"] = len(payments)
     data["num_of_transactions"] = len(transactions)
     data["wallets"] = wallets
-    data["payment"] = payments
-    data["transaction"] = transactions
-    data["analytics"] = analytics
+    data["transactions"] = sorted(payments, key=lambda x: x.created_at, reverse=True)[:3]
+    successful_transactions = [t for t in transactions if t.status == "Successful"]
+    data["transaction_volume"] = sum(float(t.amount) for t in successful_transactions)
     return data
 
+@app.get("/me", tags=["Business"])
+async def business_details(business: BusinessOut = Depends(get_current_user)):
+    return business
 
 @app.post("/checkout/create", response_model=dict, tags=["Payment"])
-def checkout_create(body: CreateCheckoutRequest, db: Session = Depends(get_db),):
+def checkout_create(body: CreateCheckoutRequest, db: Session = Depends(get_db),  business: BusinessOut = Depends(get_current_user)):
     """
     API endpoint to initiate payment to business.
     """
-    business_wallet = db.query(Wallet).filter(Wallet.user_id == body.business_id).first()
+    business_wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
     if not business_wallet:
         raise HTTPException(status_code=404, detail="No wallet related to business")
     reciever_address = business_wallet.address
     
     amount = body.amount
     
-    payment = Payment(user_id=body.business_id, receiver_address=reciever_address, amount=amount)
+    payment = Payment(payment_id=str(uuid.uuid4()), user_id=business.user_id, receiver_address=reciever_address, amount=amount)
     db.add(payment)
     db.commit()
     db.refresh(payment)
@@ -355,7 +367,7 @@ def initiate_checkout_payment(Data: InitiateCheckout, background_tasks: Backgrou
 
     return data
 
-@app.post("/regenerate-api-key", tags=["Business"])
+@app.get("/regenerate-api-key", tags=["Business"])
 async def regenerate_api_key(db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
     """
     Regenerate API key for the authenticated business.
@@ -379,6 +391,52 @@ async def regenerate_api_key(db: Session = Depends(get_db), business: BusinessOu
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to regenerate API key"
         )
+
+
+@app.get("/transactions/")
+@app.get("/transactions/{num}")
+def get_transactions(num: str = None, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    API endpoint to get Transaction to a wallet address.
+    """
+    wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+    transaction_query = db.query(Transaction).filter(Transaction.to_address == wallet.address)
+    
+    if num:
+        transaction_query = transaction_query.limit(int(num))
+    
+    transactions = transaction_query.all()
+    
+    if not transactions:
+        pass
+        # raise HTTPException(status_code=404, detail="No Transaction to this wallet address")
+
+    post_data = {"transacts":[to_dict(transaction) for transaction in transactions]}
+
+    return post_data
+
+@app.get("/payments/")
+@app.get("/payments/{num}")
+def get_payments(num: str = None, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    API endpoint to get Transaction to a wallet address.
+    """
+    wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+    payment_query = db.query(Payment).filter(Payment.receiver_address == wallet.address)
+    
+    if num:
+        payment_query = payment_query.limit(int(num))
+    
+    payments = payment_query.all()
+    
+    if not payments:
+        pass
+        # raise HTTPException(status_code=404, detail="No Transaction to this wallet address")
+    
+    post_data = {"payments":[to_dict(payment) for payment in payments]}
+
+    return post_data
+
 
 if __name__ == "__main__":
     import uvicorn

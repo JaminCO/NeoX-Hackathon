@@ -76,7 +76,10 @@ def monitor_transactions(address_1, address_2, target_amount, timeout=600):
 
         filter = w3.eth.filter('pending')
         filter_id = filter.filter_id
-        while (datetime.now() - start_time).total_seconds() < timeout:
+        while True:
+            if (datetime.now() - start_time).total_seconds() >= timeout:
+                print("Monitoring timed out after %s seconds", timeout)
+                return info
             while datas:
                 # Get all new pending transactions
                 pending_transactions = w3.eth.get_filter_changes(filter.filter_id)
@@ -108,6 +111,6 @@ def monitor_transactions(address_1, address_2, target_amount, timeout=600):
     finally:
             if filter_id:
                 try:
-                    self.w3.eth.uninstall_filter(filter_id)
+                    w3.eth.uninstall_filter(filter_id)
                 except:
                     pass

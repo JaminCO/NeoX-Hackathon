@@ -14,6 +14,7 @@ class BusinessBase(BaseModel):
     user_id: str
     email: str
     business_name: str
+    api_key: str
     created_at: str
     updated_at: str
 
@@ -58,7 +59,6 @@ class BusinessOut(BusinessBase):
 
 class CreateCheckoutRequest(BaseModel):
     amount: float
-    business_id: str
 
 class InitiateCheckout(BaseModel):
     payment_id: str
