@@ -8,7 +8,8 @@ from web3.providers.persistent import (
     WebSocketProvider,
 )
 import requests
-from datetime import datetime
+import time
+
 
 # # Wallet or contract address to monitor
 rpc_url = "https://neoxt4seed1.ngd.network"
@@ -66,51 +67,44 @@ def check_transaction(tx_hash, sender_address, receiver_address, target_amount):
     return False
 
 # Poll for new pending transactions
-def monitor_transactions(address_1, address_2, target_amount, timeout=600):
-    start_time = datetime.now()
-
+def monitor_transactions(address_1, address_2, target_amount, timeout=60*10):
+    with open("transaction_new_log.txt", "a") as file:
+        file.write(f"Monitoring transactions between {address_1} and {address_2} for amount {target_amount} GAS\n")
+    start_time = time.time()
     info = False
-    datas = True
     filter_id = None
+    
     try:
-
         filter = w3.eth.filter('pending')
         filter_id = filter.filter_id
-        while True:
-            if (datetime.now() - start_time).total_seconds() >= timeout:
-                print("Monitoring timed out after %s seconds", timeout)
-                return info
-            while datas:
-                # Get all new pending transactions
-                pending_transactions = w3.eth.get_filter_changes(filter.filter_id)
-                
-                # Loop through each pending transaction and check if it meets the criteria
-                for tx_hash in pending_transactions:
-                    t_hash = f"0x{tx_hash.hex()}"
-                    data = check_transaction(tx_hash, address_1, address_2, target_amount)
-                    if data:
-                        # print(f"Transaction {t_hash} matches criteria. Waiting for confirmation...")
-                        # Wait for transaction to be mined
-                        receipt = None
-                        while not receipt:
-                            time.sleep(2)
-                            receipt = monitor_confirmed_transactions(tx_hash)
+        
+        while (time.time() - start_time) <= timeout:  # Simplified timeout check
+            pending_transactions = w3.eth.get_filter_changes(filter.filter_id)
+            
+            for tx_hash in pending_transactions:
+                if (time.time() - start_time) > timeout:
+                    break
+                    
+                data = check_transaction(tx_hash, address_1, address_2, target_amount)
+                if data:
+                    receipt = None
+                    while not receipt and (time.time() - start_time) <= timeout:
+                        time.sleep(2)
+                        receipt = monitor_confirmed_transactions(tx_hash)
+                        print("step 2")
 
-                        # Confirm successful mining
-                        if receipt['status'] == 1:
-                            print(f"Transaction {t_hash} successfully mined and confirmed.")
-                            info = {"receipt":receipt, "tx_hash":t_hash}
-                            datas = False
-                            break
-                        else:
-                            print(f"Transaction {t_hash} failed.")
-                            info = False
-                        datas = False
-                        break
+                    if receipt and receipt['status'] == 1:
+                        print("step 3")
+                        return {"receipt": receipt, "tx_hash": f"0x{tx_hash.hex()}"}
+                    
+            time.sleep(1)  # Add small delay to prevent excessive CPU usage
+            
         return info
-    finally:
-            if filter_id:
-                try:
-                    w3.eth.uninstall_filter(filter_id)
-                except:
-                    pass
+    except:
+        if filter_id:
+            try:
+                w3.eth.uninstall_filter(filter_id)
+            except Exception as e:
+                print(f"Error uninstalling filter: {e}")
+    return info
+

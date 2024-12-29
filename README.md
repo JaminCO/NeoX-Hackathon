@@ -1,52 +1,25 @@
-# NeoX Crypto Payment Gateway
+# LianFlow Crypto Payment Gateway
 
-A FastAPI-based cryptocurrency payment gateway that allows businesses to accept crypto payments using the NeoX blockchain.
+Welcome to LianFlow, the next-generation cryptocurrency payment gateway powered by FastAPI. LianFlow empowers businesses to effortlessly accept and manage crypto payments using the NeoX blockchain.
 
-## Features
+## Key Features
 
-- Business account creation and management
-- Wallet creation and import functionality
-- Payment processing and transaction monitoring
-- Real-time payment status updates via WebSocket
-- Secure API key authentication
-- Webhook notifications for payment status updates
+- **Business Account Management**: Streamlined processes for creating and managing business accounts.
+- **Wallet Operations**: Easy wallet creation and import for secure and efficient transactions.
+- **Seamless Payment Processing**: Efficient handling of payments with real-time transaction monitoring.
+- **Instant Payment Updates**: Real-time status updates via WebSocket for immediate insights.
+- **Secure API Authentication**: Protect your transactions with robust API key authentication.
+- **Proactive Webhook Notifications**: Stay informed with instant notifications on payment status changes.
 
-## Tech Stack
+## Technology Stack
 
-- **FastAPI** (Python web framework)
-- **SQLAlchemy** (ORM)
-- **Web3.py** (Blockchain interaction)
-- **PostgreSQL/SQLite** (Database)
+- **FastAPI**: A modern, high-performance web framework for building APIs with Python.
+- **SQLAlchemy**: A powerful ORM for database management and operations.
+- **Web3.py**: A comprehensive library for interacting with the blockchain.
+- **PostgreSQL/SQLite**: Reliable databases for storing and managing data.
 
-## API Routes
+## API Endpoints
 
-### Authentication Routes
-
-#### `POST /users/signup`
-Create a new business account.
-- **Request Body**:
-  ```json
-  {
-    "business_name": "string",
-    "email": "string",
-    "password": "string",
-  }
-  ```
-
-- **Returns**: User ID and API key
-
-#### `POST /users/token`
-Login using username/password.
-- **Request Body**:
-  ```json
-  {
-    "email": "string",
-    "password": "string",
-  }
-  ```
-- **Returns**: JWT access token
-
-### API Routes (Requires API Key Authentication)
 
 All API routes require an API key to be passed in the header:
 
@@ -55,9 +28,7 @@ Authorization: Bearer YOUR_API_KEY
 ```
 
 You can obtain your API key from:
-1. Initial signup response
-2. Dashboard settings
-3. Using the regenerate API key endpoint (`POST /users/regenerate-api-key`)
+1. Settings page -> API Keys tab
 
 #### Payment Routes
 

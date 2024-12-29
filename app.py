@@ -19,7 +19,11 @@ from database import SessionLocal, engine, get_db
 from models import Base, Business, Wallet, Payment, Transaction, Analytics
 import monitor
 import api
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
+
+# Initialize ThreadPoolExecutor
+executor = ThreadPoolExecutor(max_workers=5)
 
 app = FastAPI(title="Crypto Wallet API")
 
@@ -47,9 +51,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # Create tables
 Base.metadata.create_all(bind=engine)
-active_connections = {}
 
-async def transacts(data, db):
+def transacts(data, db):
+    url = data["webhook"]
     sender_address = data["sender"]
     reciever_address = data["recv"]
     amount = data["amount"]
@@ -58,14 +62,110 @@ async def transacts(data, db):
     payment = db.query(Payment).filter(Payment.payment_id == payment_id).first()
 
     result = monitor.monitor_transactions(sender_address, reciever_address, amount)
+    print('hereeeeee')
     if result != False:
-        payment.transaction_hash = result["tx_hash"]
-        payment.status = "Successful"
+        # Prepare transaction data
+        print("DATAAA")
+        receipt = result["receipt"]
+        gas_used = receipt['gasUsed']
+        gas_price = receipt['effectiveGasPrice']
+        gas_fee = (gas_used * gas_price) / 10**18  # Convert from Wei to native token
+        print(gas_fee)
+
+        transaction_data = {
+            "transaction_hash": result["tx_hash"],
+            "status": 1,  # 1 for successful
+            "receipt": receipt,
+            "amount": amount,
+            "gas_fee": gas_fee,
+            "blockNumber": receipt['blockNumber']
+        }
+
+        # Update payment and create transaction
+        update_payment_and_create_transaction(payment_id, transaction_data, db)
+
+        # Prepare webhook data
+        webhook_data = {
+            "receipt": result,
+            "email": email,
+            "payment_id": payment_id,
+            "status": "Successful",
+            "amount": amount,
+            "sender": sender_address,
+            "receiver": reciever_address,
+            "transaction_hash": result["tx_hash"],
+            "user_id": payment.user_id,
+            "gas_fee": gas_fee
+        }
+        response = requests.post(url, json=webhook_data)
+        if response.status_code == 200:
+            print(response.json())
+        else:
+            print(f"Failed to send webhook. Status code: {response.status_code}, Response: {response.text}")
+    else:
+        transaction_data = {
+            "transaction_hash": "Failed",
+            "status": 0,  # 0 for failed
+            "receipt": {"from": sender_address, "to": reciever_address},
+            "amount": amount,
+            "gas_fee": 0,
+            "blockNumber": None
+        }
+        update_payment_and_create_transaction(payment_id, transaction_data, db)
+
+def update_payment_and_create_transaction(payment_id, transaction_data, db: Session = Depends(get_db)):
+    """
+    Update the payment table and create a new row in the Transactions table.
+    Args:
+        payment_id: UUID of the payment
+        transaction_data: Dict containing:
+            - transaction_hash: str
+            - status: int (1 for success, 0 for failure)
+            - receipt: dict with 'from' and 'to' addresses
+            - amount: float
+            - gas_fee: float
+            - blockNumber: int or None
+    """
+    # Update the payment table
+    payment = db.query(Payment).filter(Payment.payment_id == payment_id).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="No Payment with this ID")
+    
+    # Update payment status
+    payment.transaction_hash = transaction_data["transaction_hash"]
+    payment.status = "Successful" if transaction_data["status"] == 1 else "Failed"
+    db.commit()
+    db.refresh(payment)
+    
+    # Create a new row in the Transactions table
+    new_transaction = Transaction(
+        transaction_id=str(uuid.uuid4()),
+        payment_id=payment_id,
+        from_address=transaction_data["receipt"]["from"],
+        to_address=transaction_data["receipt"]["to"],
+        amount=transaction_data["amount"],
+        gas_fee=transaction_data["gas_fee"],
+        status="Successful" if transaction_data["status"] == 1 else "Failed",
+        block_number=transaction_data["blockNumber"],
+        transaction_hash=transaction_data["transaction_hash"]
+    )
+    
+    try:
+        db.add(new_transaction)
         db.commit()
-        db.refresh(payment)
-        if email in active_connections:
-            websocket = active_connections[email]
-            await websocket.send_json(payment.status)
+        db.refresh(new_transaction)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create transaction record: {str(e)}"
+        )
+    
+    return {
+        "message": "Payment and Transaction updated successfully",
+        "payment_status": payment.status,
+        "transaction_id": new_transaction.transaction_id
+    }
 
 
 # Utility Functions
@@ -153,10 +253,6 @@ def create_user(body: CreateBusiness, db: Session = Depends(get_db)):
     db.add(wallet)
     db.commit()
     db.refresh(wallet)
-    wallet = {
-        "wallet_address": address,
-        "private_key": private_key
-    }
     return {
         "user_id": user.user_id,
         "api_key": api_key
@@ -322,13 +418,11 @@ def get_payment(paymentId: str, db: Session = Depends(get_db),):
     amount = payment.amount
     total_amount = get_gas_to_usdt(amount)
 
-    post_data = {
-        "payment_id": payment.payment_id,
-        "business_name": payment.business.business_name,
-        "business_id": payment.user_id,
-        "gas_amount": amount,
-        "total_amount": total_amount,
-    }
+    post_data = to_dict(payment)
+    post_data["business_name"] = payment.business.business_name
+    post_data["business_id"] = payment.user_id
+    post_data["gas_amount"] = amount
+    post_data["total_amount"] = total_amount
     return post_data
 
 @app.post("/checkout/initiate", response_model=dict, tags=["Payment"])
@@ -354,7 +448,7 @@ def initiate_checkout_payment(Data: InitiateCheckout, background_tasks: Backgrou
         "email": Data.data,
         "payment_id": Data.payment_id
     }
-    background_tasks.add_task(transacts, post_data, db)
+    future = executor.submit(transacts, post_data, db)
 
 
     data = {
@@ -425,7 +519,7 @@ def get_payments(num: str = None, db: Session = Depends(get_db), business: Busin
     payment_query = db.query(Payment).filter(Payment.receiver_address == wallet.address)
     
     if num:
-        payment_query = payment_query.limit(int(num))
+        payment_query = payment_query.order_by(Payment.created_at.desc()).limit(int(num))
     
     payments = payment_query.all()
     
@@ -436,8 +530,28 @@ def get_payments(num: str = None, db: Session = Depends(get_db), business: Busin
     post_data = {"payments":[to_dict(payment) for payment in payments]}
 
     return post_data
+    
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True)
+
+@app.get("/payment/status/{paymentId}", response_model=dict)
+def payment_status(paymentId: str, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    API endpoint to get Payment Id details.
+    """
+    payment = db.query(Payment).filter(Payment.payment_id == paymentId).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="No Payment with this ID")
+    if business.user_id != payment.user_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to view this payment")
+
+    post_data = {
+        "payment_id": payment.payment_id,
+        "status": payment.status,
+        "transaction_hash": payment.transaction_hash,
+    }
+
+    return post_data
