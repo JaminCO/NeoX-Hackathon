@@ -31,7 +31,7 @@ All API routes require an API key to be passed in the header:
 Authorization: Bearer YOUR_API_KEY
 ```
 
-You can obtain your API key from:
+You can obtain your API key from [Lianflow](https://lianflow.vercel.app/):
 1. Settings page -> API Keys tab
 
 #### Payment Routes

@@ -412,7 +412,7 @@ def checkout_create(body: CreateCheckoutRequest, db: Session = Depends(get_db), 
     db.commit()
     db.refresh(payment)
 
-    url = f"http://127.0.0.1:3000/checkout/{payment.payment_id}"
+    url = f"https://lianflow.vercel.app/checkout/{payment.payment_id}"
 
     post_data = {
         "payment_id": payment.payment_id,

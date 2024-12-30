@@ -43,15 +43,15 @@ Welcome to LianFlow, a next-generation cryptocurrency payment gateway powered by
 
 To begin using LianFlow, create an account by making a `POST` request to:
 ```
-https://neox-hackathon.onrender.com/users/signup
+https://lianflow.vercel.app/
 ```
 
 ### API Keys
 
-There are two ways to obtain your API key:
+The way to obtain your API key:
 
-1. **During Signup**: An API key is automatically provided after successful registration
-2. **From Dashboard**: Navigate to Settings >> API Keys >> 'Generate new API Keys'
+1. **After Signup**: Signup on our platform
+1. **From Dashboard**: Navigate to Settings >> API Keys >> 'Generate new API Keys'
 
 ## API Reference
 
@@ -61,7 +61,7 @@ There are two ways to obtain your API key:
 
 ### Base URL
 ```
-https://api.lianflow.com/v1
+https://neox-hackathon.onrender.com/api/v1
 ```
 
 ### Authentication Headers
@@ -181,7 +181,7 @@ Webhook Payload:
 import requests
 
 API_KEY = "your_api_key"
-BASE_URL = "https://api.lianflow.com/v1"
+BASE_URL = "https://neox-hackathon.onrender.com/api/v1"
 
 headers = {
     "Authorization": f"Bearer {API_KEY}",
@@ -208,7 +208,7 @@ print(response.json())
 ### JavaScript
 ```javascript
 const API_KEY = 'your_api_key';
-const BASE_URL = 'https://api.lianflow.com/v1';
+const BASE_URL = 'https://neox-hackathon.onrender.com/api/v1';
 
 const headers = {
     'Authorization': `Bearer ${API_KEY}`,
