@@ -12,7 +12,8 @@ import time
 
 
 # # Wallet or contract address to monitor
-rpc_url = "https://neoxt4seed1.ngd.network"
+rpc_url = "https://mainnet-1.rpc.banelabs.org"
+# "https://neoxt4seed1.ngd.network"
 
 
 # Connect to an Ethereum node (e.g., using Infura or a local node)
@@ -52,10 +53,16 @@ def check_transaction(tx_hash, sender_address, receiver_address, target_amount):
         if tx:
             t_hash = f"0x{tx['hash'].hex()}"
             vals = tx['value'] / 10**18
+            print(f"vals: {vals}")
+            print(f"target_amount: {target_amount}")
+            print(f"tx['from']: {tx['from']}")
+            print(f"sender_address: {sender_address}")
+            print(f"tx['to']: {tx['to']}")
+            print(f"receiver_address: {receiver_address}")
 
             # Check if the transaction is between the two addresses and the amount is correct
             if (tx['from'].lower() == sender_address.lower() and tx['to'].lower() == receiver_address.lower()):
-                if vals == target_amount:
+                # if vals == target_amount:
                     # print(f"Transaction found: {t_hash}")
                     # print(f"From: {tx['from']}")
                     # print(f"To: {tx['to']}")
@@ -68,36 +75,42 @@ def check_transaction(tx_hash, sender_address, receiver_address, target_amount):
 
 # Poll for new pending transactions
 def monitor_transactions(address_1, address_2, target_amount, timeout=60*10):
-    with open("transaction_new_log.txt", "a") as file:
-        file.write(f"Monitoring transactions between {address_1} and {address_2} for amount {target_amount} GAS\n")
+    # with open("transaction_new_log.txt", "a") as file:
+        # file.write(f"Monitoring transactions between {address_1} and {address_2} for amount {target_amount} GAS\n")
     start_time = time.time()
     info = False
     filter_id = None
     
     try:
+        print("step 1")
         filter = w3.eth.filter('pending')
         filter_id = filter.filter_id
-        
+
         while (time.time() - start_time) <= timeout:  # Simplified timeout check
+            print("step 2")
             pending_transactions = w3.eth.get_filter_changes(filter.filter_id)
+            print(f"pending_transactions: {pending_transactions}")
             
             for tx_hash in pending_transactions:
-                if (time.time() - start_time) > timeout:
-                    break
+                print("step 3")
+                # if (time.time() - start_time) > timeout:
+                #     break
                     
                 data = check_transaction(tx_hash, address_1, address_2, target_amount)
+                print(f"data: {data}")
                 if data:
+                    print("step 4")
                     receipt = None
                     while not receipt and (time.time() - start_time) <= timeout:
                         time.sleep(2)
                         receipt = monitor_confirmed_transactions(tx_hash)
-                        print("step 2")
+                        print("step 5")
 
                     if receipt and receipt['status'] == 1:
-                        print("step 3")
+                        print("step 6")
                         return {"receipt": receipt, "tx_hash": f"0x{tx_hash.hex()}"}
                     
-            time.sleep(1)  # Add small delay to prevent excessive CPU usage
+            # time.sleep(1)   Add small delay to prevent excessive CPU usage
             
         return info
     except:

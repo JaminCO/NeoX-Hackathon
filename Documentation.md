@@ -1,47 +1,70 @@
-# LianFlow Crypto Payment Gateway API Documentation
+# LianFlow Crypto Payment Gateway
+
+Welcome to LianFlow, a next-generation cryptocurrency payment gateway powered by FastAPI and built around the NEO X blockchain. LianFlow empowers businesses to effortlessly accept and manage crypto payments with security and efficiency.
 
 ## Table of Contents
-1. [Introduction](#1-introduction)
-2. [Authentication](#2-authentication)
-3. [Base URL](#3-base-url)
-4. [API Endpoints](#4-api-endpoints)
-    1. [Create Payment](#41-create-payment)
-    2. [Get Payment Details](#42-get-payment-details)
-    3. [Check Payment Status](#43-check-payment-status)
-    4. [Get Transaction Details](#44-get-transaction-details)
-5. [Webhook Integration](#5-webhook-integration)
-6. [Error Handling](#6-error-handling)
-7. [Code Examples](#7-code-examples)
-8. [Support](#8-support)
+1. [Key Features](#key-features)
+2. [Technology Stack](#technology-stack)
+3. [Getting Started](#getting-started)
+    - [Authentication](#authentication)
+    - [API Keys](#api-keys)
+4. [API Reference](#api-reference)
+    - [Base URL](#base-url)
+    - [Authentication Headers](#authentication-headers)
+    - [Endpoints](#endpoints)
+5. [Wallets](#wallets)
+6. [Making Payments](#making-payments)
+7. [Error Handling](#error-handling)
+8. [Webhook Integration](#webhook-integration)
+9. [Code Examples](#code-examples)
+10. [Troubleshooting](#troubleshooting)
+11. [Support](#support)
 
-## 1. Introduction
-LianFlow Crypto Payment Gateway enables businesses to accept cryptocurrency payments seamlessly. This documentation provides comprehensive details about integrating our payment gateway into your applications.
+## Key Features
 
-## 2. Authentication
-All API requests require authentication using an API key.
+- **Business Account Management**: Streamlined processes for creating and managing business accounts
+- **Wallet Operations**: Easy wallet creation and import for secure transactions
+- **Seamless Payment Processing**: Efficient handling of payments with real-time monitoring
+- **Instant Payment Updates**: Real-time status updates via WebSocket
+- **Secure API Authentication**: Robust API key authentication
+- **Proactive Webhook Notifications**: Instant notifications on payment status changes
 
-### To obtain your API key:
-1. Sign up at [LianFlow Dashboard](https://dashboard.lianflow.com)
-2. Navigate to **Settings** -> **API Keys**
-3. Generate a new API key
+## Technology Stack
 
-### Include your API key in all requests:
+- **FastAPI**: Modern, high-performance web framework for building APIs
+- **SQLAlchemy**: Powerful ORM for database management
+- **Web3.py**: Comprehensive blockchain interaction library
+- **PostgreSQL/SQLite**: Reliable database solutions
+
+## Getting Started
+
+
+### Authentication
+
+To begin using LianFlow, create an account by making a `POST` request to:
 ```
-Header: Authorization: Bearer YOUR_API_KEY
+https://neox-hackathon.onrender.com/users/signup
 ```
 
-## 3. Base URL
-All API requests should be made to:
+### API Keys
+
+There are two ways to obtain your API key:
+
+1. **During Signup**: An API key is automatically provided after successful registration
+2. **From Dashboard**: Navigate to Settings >> API Keys >> 'Generate new API Keys'
+
+## API Reference
+
+**[More Detailed API Reference for Developers](https://peaceful-rainforest-7cd.notion.site/API-Reference-for-Developers-1b6d8e83b03c46d7a57e643452536dd7#7ec7d0924b3a4728b44138b42472fe64)**
+
+#
+
+### Base URL
 ```
 https://api.lianflow.com/v1
 ```
 
-## 4. API Endpoints
-
-### 4.1 Create Payment
-**POST** `/payment/create`
-
-**Request Headers:**
+### Authentication Headers
 ```json
 {
     "Authorization": "Bearer YOUR_API_KEY",
@@ -49,17 +72,24 @@ https://api.lianflow.com/v1
 }
 ```
 
-**Request Body:**
+### Endpoints
+
+#### 1. Create Payment
+```http
+POST /payment/create
+```
+
+Request Body:
 ```json
 {
-    "amount": float,            // Payment amount
-    "sender_address": "string", // Sender's wallet address
-    "data": "string",          // Additional metadata (e.g., email)
-    "webhook_url": "string"    // Webhook URL for notifications
+    "amount": float,
+    "sender_address": "string",
+    "data": "string",
+    "webhook_url": "string"
 }
 ```
 
-**Response:**
+Response:
 ```json
 {
     "payment_id": "uuid",
@@ -67,10 +97,12 @@ https://api.lianflow.com/v1
 }
 ```
 
-### 4.2 Get Payment Details
-**GET** `/payment/{paymentId}`
+#### 2. Get Payment Details
+```http
+GET /payment/{paymentId}
+```
 
-**Response:**
+Response:
 ```json
 {
     "payment_id": "string",
@@ -81,40 +113,52 @@ https://api.lianflow.com/v1
 }
 ```
 
-### 4.3 Check Payment Status
-**GET** `/payment/status/{paymentId}`
-
-**Response:**
-```json
-{
-    "payment_id": "string",
-    "status": "string",
-    "transaction_hash": "string"
-}
+#### 3. Check Payment Status
+```http
+GET /payment/status/{paymentId}
 ```
 
-### 4.4 Get Transaction Details
-**GET** `/transaction/{transactionId}`
-
-**Response:**
-```json
-{
-    "transaction_id": "string",
-    "payment_id": "string",
-    "from_address": "string",
-    "to_address": "string",
-    "amount": float,
-    "gas_fee": float,
-    "status": "string",
-    "block_number": integer,
-    "transaction_hash": "string"
-}
+#### 4. Get Transaction Details
+```http
+GET /transaction/{transactionId}
 ```
 
-## 5. Webhook Integration
-When creating a payment, specify a webhook URL to receive real-time payment updates.
+## Wallets
 
-**Webhook Payload:**
+A wallet is automatically created upon signup. Access your wallet through the wallet section in your dashboard. The wallet enables you to:
+- Securely manage cryptocurrency assets
+- View transaction history
+- Process payments
+- Monitor balances
+
+## Making Payments
+
+To make a payment:
+1. Ensure you have an active account
+2. Use your autogenerated wallet
+3. Supply required payment details
+4. Monitor transaction status
+
+## Error Handling
+
+| HTTP Status Code | Description                    | Details                                    |
+|-----------------|--------------------------------|--------------------------------------------|
+| 200             | OK                             | Request successful                         |
+| 401             | Not authorized                 | Authentication required                    |
+| 422             | Validation error               | Invalid input supplied                     |
+| 451             | Authentication error           | Invalid credentials                        |
+| 404             | Not found                      | Endpoint doesn't exist                     |
+| 500, 502, 504   | Server errors                  | Internal server issue                      |
+
+Error response includes:
+- `type`: Either 'auth_error' or 'validation_error'
+- Detailed error message
+
+## Webhook Integration
+
+Receive real-time payment updates by specifying a webhook URL when creating payments.
+
+Webhook Payload:
 ```json
 {
     "receipt": object,
@@ -130,18 +174,9 @@ When creating a payment, specify a webhook URL to receive real-time payment upda
 }
 ```
 
-## 6. Error Handling
-### Common HTTP Status Codes:
-- `200`: Success
-- `400`: Bad Request
-- `401`: Unauthorized (Invalid API key)
-- `403`: Forbidden (Insufficient permissions)
-- `404`: Not Found
-- `500`: Internal Server Error
+## Code Examples
 
-## 7. Code Examples
-
-### Python Example:
+### Python
 ```python
 import requests
 
@@ -170,7 +205,7 @@ response = requests.post(
 print(response.json())
 ```
 
-### JavaScript Example:
+### JavaScript
 ```javascript
 const API_KEY = 'your_api_key';
 const BASE_URL = 'https://api.lianflow.com/v1';
@@ -180,7 +215,6 @@ const headers = {
     'Content-Type': 'application/json'
 };
 
-// Create payment
 const paymentData = {
     amount: 100.0,
     sender_address: 'sender_wallet_address',
@@ -198,21 +232,34 @@ fetch(`${BASE_URL}/payment/create`, {
 .catch(error => console.error('Error:', error));
 ```
 
-## 8. Support
-For technical support:
-- **Email**: support@lianflow.com
-- **Documentation**: [LianFlow Docs](https://docs.lianflow.com)
-- **API Status**: [LianFlow Status](https://status.lianflow.com)
+## Troubleshooting
 
-### Best Practices:
-1. Always store API keys securely.
-2. Implement proper error handling.
-3. Test thoroughly in sandbox environment before going live.
-4. Monitor webhook endpoints for reliability.
-5. Keep your integration up to date.
+Common issues and solutions:
 
-### Rate Limits:
-- 1000 requests per minute per API key
-- Webhook timeout: 10 seconds
+1. **Authentication Errors (422)**:
+   - Ensure all required fields are included
+   - Use raw JSON format for request body
+   - Verify API key is valid and properly formatted
 
-For additional support or feature requests, please contact our support team.
+2. **Payment Processing Issues**:
+   - Verify sufficient balance
+   - Check gas fees
+   - Ensure correct wallet addresses
+
+## Support
+
+For technical support or questions:
+- Email: jaminonuegbu@gmail.com
+
+### Best Practices
+1. Store API keys securely
+2. Implement proper error handling
+3. Monitor webhook endpoints
+4. Keep integration up to date
+5. Test thoroughly in development environment
+
+### Note
+To withdraw funds:
+1. Go to DASHBOARD >> WALLET
+2. Click the WITHDRAW Button in Quick Actions
+3. Complete withdrawal process in Settings

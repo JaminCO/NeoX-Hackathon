@@ -54,7 +54,7 @@ class Payment(Base):
     transaction_hash = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     updated_at = Column(TIMESTAMP, default=datetime.utcnow, onupdate=datetime.utcnow)
-
+    # website = Column(String, nullable=False)
     business = relationship("Business", back_populates="payments")
     transactions = relationship("Transaction", back_populates="payment")
 

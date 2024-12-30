@@ -192,7 +192,7 @@ def initiate_payment(body: InitiatePaymentRequest, background_tasks: BackgroundT
     amount = body.amount
     
     sender_address = body.sender_address
-    payment = Payment(payment_id=str(uuid.uuid4()), user_id=body.business_id, data=body.data, receiver_address=reciever_address, amount=amount, sender_address=sender_address)
+    payment = Payment(payment_id=str(uuid.uuid4()), user_id=business.user_id, data=body.data, receiver_address=reciever_address, amount=amount, sender_address=sender_address)
     db.add(payment)
     db.commit()
     db.refresh(payment)

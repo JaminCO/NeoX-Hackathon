@@ -12,20 +12,24 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+from sqlalchemy import or_
 
-from xenon import create_wallet, import_wallet, get_gas_to_usdt, get_wallet_balances
-from schema import WalletImportRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut, CreateCheckoutRequest, InitiateCheckout
+from xenon import create_wallet, import_wallet, get_gas_to_usdt, get_wallet_balances, send_neox_gas
+from schema import WalletImportRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut, CreateCheckoutRequest, InitiateCheckout, WithdrawRequest
 from database import SessionLocal, engine, get_db
 from models import Base, Business, Wallet, Payment, Transaction, Analytics
 import monitor
 import api
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 # Initialize ThreadPoolExecutor
 executor = ThreadPoolExecutor(max_workers=5)
 
-app = FastAPI(title="Crypto Wallet API")
+app = FastAPI(title="LianFlow API")
 
 app.include_router(api.router, prefix="/api/v1", tags=["API V1"])
 
@@ -52,20 +56,21 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-def transacts(data, db):
-    url = data["webhook"]
+def transacts(data,  db: Session = Depends(get_db)):
+    print("transacts")
     sender_address = data["sender"]
     reciever_address = data["recv"]
     amount = data["amount"]
     email = data["email"]
     payment_id = data["payment_id"]
-    payment = db.query(Payment).filter(Payment.payment_id == payment_id).first()
+    print("move")
+    # payment = db.query(Payment).filter(Payment.payment_id == payment_id).first()
 
     result = monitor.monitor_transactions(sender_address, reciever_address, amount)
-    print('hereeeeee')
+    print('done')
     if result != False:
         # Prepare transaction data
-        print("DATAAA")
+        print("Success")
         receipt = result["receipt"]
         gas_used = receipt['gasUsed']
         gas_price = receipt['effectiveGasPrice']
@@ -84,24 +89,24 @@ def transacts(data, db):
         # Update payment and create transaction
         update_payment_and_create_transaction(payment_id, transaction_data, db)
 
-        # Prepare webhook data
-        webhook_data = {
-            "receipt": result,
-            "email": email,
-            "payment_id": payment_id,
-            "status": "Successful",
-            "amount": amount,
-            "sender": sender_address,
-            "receiver": reciever_address,
-            "transaction_hash": result["tx_hash"],
-            "user_id": payment.user_id,
-            "gas_fee": gas_fee
-        }
-        response = requests.post(url, json=webhook_data)
-        if response.status_code == 200:
-            print(response.json())
-        else:
-            print(f"Failed to send webhook. Status code: {response.status_code}, Response: {response.text}")
+        # # Prepare webhook data
+        # webhook_data = {
+        #     "receipt": result,
+        #     "email": email,
+        #     "payment_id": payment_id,
+        #     "status": "Successful",
+        #     "amount": amount,
+        #     "sender": sender_address,
+        #     "receiver": reciever_address,
+        #     "transaction_hash": result["tx_hash"],
+        #     "user_id": payment.user_id,
+        #     "gas_fee": gas_fee
+        # }
+        # response = requests.post(url, json=webhook_data)
+        # if response.status_code == 200:
+        #     print(response.json())
+        # else:
+        #     print(f"Failed to send webhook. Status code: {response.status_code}, Response: {response.text}")
     else:
         transaction_data = {
             "transaction_hash": "Failed",
@@ -224,7 +229,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 # Routes
 @app.get("/")
 def read_root():
-    return {"message": "Welcome to NeoX Crypto Payment Gateway!"}
+    return {"message": "Welcome to LianFlow - A NeoX Crypto Payment Gateway for businesses!"}
 
 
 @app.post("/users/signup", tags=["Auth"])
@@ -249,7 +254,7 @@ def create_user(body: CreateBusiness, db: Session = Depends(get_db)):
     db.refresh(user)
 
     address, private_key = create_wallet()
-    wallet = Wallet(user_id=user.user_id, address=address, private_key=private_key)
+    wallet = Wallet(wallet_id=str(uuid.uuid4()), user_id=user.user_id, address=address, private_key=private_key)
     db.add(wallet)
     db.commit()
     db.refresh(wallet)
@@ -365,7 +370,16 @@ async def dashboard_details(db: Session = Depends(get_db), business: BusinessOut
     if wallets == None:
         return {"message": "Create wallet", "status": 430}
     else:
-        transactions = db.query(Transaction).filter(Transaction.to_address == wallets.address).all()
+        transactions = (
+        db.query(Transaction)
+        .filter(
+            or_(
+                Transaction.to_address == wallets.address,
+                Transaction.from_address == wallets.address
+            )
+        )
+        .order_by(Transaction.created_at.desc())
+    ).all()
     balances = get_wallet_balances(wallets.address)
     data["balances"] = balances
     data["business"] = business
@@ -449,6 +463,7 @@ def initiate_checkout_payment(Data: InitiateCheckout, background_tasks: Backgrou
         "payment_id": Data.payment_id
     }
     future = executor.submit(transacts, post_data, db)
+    print(future)
 
 
     data = {
@@ -494,13 +509,21 @@ def get_transactions(num: str = None, db: Session = Depends(get_db), business: B
     API endpoint to get Transaction to a wallet address.
     """
     wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
-    transaction_query = db.query(Transaction).filter(Transaction.to_address == wallet.address)
-    
+    transaction_query = (
+        db.query(Transaction)
+        .filter(
+            or_(
+                Transaction.to_address == wallet.address,
+                Transaction.from_address == wallet.address
+            )
+        )
+        .order_by(Transaction.created_at.desc())
+    )
+
     if num:
         transaction_query = transaction_query.limit(int(num))
-    
+
     transactions = transaction_query.all()
-    
     if not transactions:
         pass
         # raise HTTPException(status_code=404, detail="No Transaction to this wallet address")
@@ -516,11 +539,20 @@ def get_payments(num: str = None, db: Session = Depends(get_db), business: Busin
     API endpoint to get Transaction to a wallet address.
     """
     wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
-    payment_query = db.query(Payment).filter(Payment.receiver_address == wallet.address)
-    
+    payment_query = (
+        db.query(Payment)
+        .filter(
+            or_(
+                Payment.receiver_address == wallet.address,
+                Payment.sender_address == wallet.address
+            )
+        )
+        .order_by(Payment.created_at.desc())
+    )
+
     if num:
-        payment_query = payment_query.order_by(Payment.created_at.desc()).limit(int(num))
-    
+        payment_query = payment_query.limit(int(num))
+
     payments = payment_query.all()
     
     if not payments:
@@ -532,26 +564,64 @@ def get_payments(num: str = None, db: Session = Depends(get_db), business: Busin
     return post_data
     
 
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True)
-
 @app.get("/payment/status/{paymentId}", response_model=dict)
-def payment_status(paymentId: str, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+def payment_status(paymentId: str, db: Session = Depends(get_db)):
     """
     API endpoint to get Payment Id details.
     """
     payment = db.query(Payment).filter(Payment.payment_id == paymentId).first()
     if not payment:
         raise HTTPException(status_code=404, detail="No Payment with this ID")
-    if business.user_id != payment.user_id:
-        raise HTTPException(status_code=403, detail="You are not authorized to view this payment")
 
     post_data = {
         "payment_id": payment.payment_id,
         "status": payment.status,
-        "transaction_hash": payment.transaction_hash,
+        "transaction_hash": payment.transaction_hash
     }
 
     return post_data
+
+def withdraw_neox(wallet, amount, receiver_address, db: Session = get_db()):
+    result = send_neox_gas(wallet.address, wallet.private_key, receiver_address, amount)
+    receipt = result
+    gas_used = receipt['gasUsed']
+    gas_price = receipt['effectiveGasPrice']
+    gas_fee = (gas_used * gas_price) / 10**18  # Convert from Wei to native token
+    payment = Payment(payment_id=str(uuid.uuid4()), user_id=wallet.user_id, receiver_address=receiver_address, amount=amount, sender_address=wallet.address, status="Successful", data="Withdrawal", transaction_hash=result["transactionHash"])
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    transaction = Transaction(transaction_id=str(uuid.uuid4()), payment_id=payment.payment_id, from_address=result["from"], to_address=result["to"], amount=amount, gas_fee=gas_fee, status="Successful" if result["status"] == 1 else "Failed", block_number=result["blockNumber"], transaction_hash=result["transactionHash"])
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    print(transaction)
+    print(payment)
+    return True
+
+@app.post("/withdraw")
+def withdraw(body: WithdrawRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), business: BusinessOut = Depends(get_current_user)):
+    """
+    API endpoint to withdraw funds from the business's wallet.
+    """
+    # try:
+    wallet = db.query(Wallet).filter(Wallet.user_id == business.user_id).first()
+    if wallet.address == body.receiver_address:
+        raise HTTPException(status_code=402, detail="Cannot Withdraw to your Business Address")
+    if not wallet:
+        raise HTTPException(status_code=404, detail="No wallet found for this business")
+    balance = get_wallet_balances(wallet.address)
+    if body.amount > balance["GAS"]:
+        raise HTTPException(status_code=402, detail="Insufficient balance")
+
+    amount = body.amount
+    receiver_address = body.receiver_address
+    background_tasks.add_task(withdraw_neox, wallet, amount, receiver_address, db)
+    # except Exception as e:
+    #     raise HTTPException(status_code=400, detail=f"Failed to send transaction, {e}")
+
+    return {"message": "Withdrawal Initiated successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True, workers=2)

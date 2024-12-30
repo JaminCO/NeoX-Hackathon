@@ -1,6 +1,6 @@
 # LianFlow Crypto Payment Gateway
 
-Welcome to LianFlow, the next-generation cryptocurrency payment gateway powered by FastAPI. LianFlow empowers businesses to effortlessly accept and manage crypto payments using the NeoX blockchain.
+LianFlow is designed to simplify crypto payment processing for businesses operating on the NEO X blockchain. The solution empowers businesses to accept cryptocurrency payments for their products and services while offering an easy-to-integrate system for existing codebases and platforms. By streamlining the integration process, the platform reduces the technical barriers that often deter businesses from adopting blockchain-based payments..
 
 ## Key Features
 
@@ -18,8 +18,12 @@ Welcome to LianFlow, the next-generation cryptocurrency payment gateway powered 
 - **Web3.py**: A comprehensive library for interacting with the blockchain.
 - **PostgreSQL/SQLite**: Reliable databases for storing and managing data.
 
-## API Endpoints
+## API INTEGRATION
 
+For a more Detailed Documentation for Integration check [LianFlow Documentaion](/Documentation.md)
+
+
+## API Endpoints
 
 All API routes require an API key to be passed in the header:
 

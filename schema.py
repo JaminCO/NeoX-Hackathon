@@ -7,7 +7,6 @@ class InitiatePaymentRequest(BaseModel):
     amount: float
     data: str
     sender_address: str
-    business_id: str
     webhook: str
 
 class BusinessBase(BaseModel):
@@ -64,3 +63,7 @@ class InitiateCheckout(BaseModel):
     payment_id: str
     data: str
     sender_address: str
+
+class WithdrawRequest(BaseModel):
+    amount: float
+    receiver_address: str

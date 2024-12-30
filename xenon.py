@@ -1,9 +1,35 @@
 from web3 import Web3
 from eth_account import Account
 import requests
+import json
+from hexbytes import HexBytes
+from typing import Dict, Any
+import base64
+
+class HexJsonEncoder:
+    @staticmethod
+    def encode_receipt(receipt: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert transaction receipt to JSON-serializable format."""
+        serialized = {}
+        for key, value in receipt.items():
+            if isinstance(value, HexBytes):
+                serialized[key] = value.hex()
+            elif isinstance(value, bytes):
+                serialized[key] = base64.b64encode(value).decode('ascii')
+            elif isinstance(value, (list, tuple)):
+                serialized[key] = [
+                    item.hex() if isinstance(item, HexBytes)
+                    else base64.b64encode(item).decode('ascii') if isinstance(item, bytes)
+                    else item
+                    for item in value
+                ]
+            else:
+                serialized[key] = value
+        return serialized
 
 # RPC endpoint of the Ethereum network
-rpc_url = "https://neoxt4seed1.ngd.network"
+rpc_url = "https://mainnet-1.rpc.banelabs.org"
+# "https://neoxt4seed1.ngd.network"
 ws_url = "wss://neoxt4wss1.ngd.network" 
 web3 = Web3(Web3.HTTPProvider(rpc_url))
 
@@ -59,17 +85,11 @@ def import_wallet(private_key_user):
 
 def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ether):
     # Check if connected
-    if web3.is_connected():
-        pass
-    else:
-        pass
-        return 0
 
     amount_in_wei = web3.to_wei(amount_in_ether, 'ether')
 
     # Get the nonce (number of transactions sent from the sender address)
     nonce = web3.eth.get_transaction_count(sender_address)
-
     # Create the transaction
     tx = {
         'nonce': nonce,
@@ -83,6 +103,7 @@ def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ethe
     gas_price = web3.eth.gas_price
     tx['gasPrice'] = gas_price
 
+
     # Sign the transaction with the sender's private key
     signed_tx = web3.eth.account.sign_transaction(tx, private_key)
 
@@ -94,9 +115,10 @@ def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ethe
 
     # Optional: Wait for the transaction receipt (to confirm it was mined)
     receipt = web3.eth.wait_for_transaction_receipt(tx_hash)
-    # print(f"Transaction receipt: {receipt}")
+    
+    serialized_receipt = HexJsonEncoder.encode_receipt(dict(receipt))
 
-    return receipt
+    return serialized_receipt
 
 # from eth_abi import decode
 # import json
