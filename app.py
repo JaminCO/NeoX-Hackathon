@@ -595,8 +595,6 @@ def withdraw_neox(wallet, amount, receiver_address, db: Session = get_db()):
     db.add(transaction)
     db.commit()
     db.refresh(transaction)
-    print(transaction)
-    print(payment)
     return True
 
 @app.post("/withdraw")

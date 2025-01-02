@@ -84,7 +84,6 @@ def import_wallet(private_key_user):
 
 
 def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ether):
-    # Check if connected
 
     amount_in_wei = web3.to_wei(amount_in_ether, 'ether')
 
@@ -97,7 +96,8 @@ def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ethe
         'value': amount_in_wei,
         'gas': 21000,  # Standard gas limit for ETH transfers
         'gasPrice': web3.to_wei('30', 'gwei'),  # Replace '30' with current gas price in Gwei
-        'chainId': 12227332  # Mainnet chain ID. Use 3, 4, or 5 for testnets like Ropsten, Rinkeby, or Goerli
+        'chainId':  47763,
+        # 12227332  # Mainnet chain ID. Use 3, 4, or 5 for testnets like Ropsten, Rinkeby, or Goerli
     }
 
     gas_price = web3.eth.gas_price
