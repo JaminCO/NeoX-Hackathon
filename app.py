@@ -22,6 +22,7 @@ import monitor
 import api
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dotenv import load_dotenv
+import uvicorn
 
 load_dotenv()
 
@@ -620,6 +621,6 @@ def withdraw(body: WithdrawRequest, background_tasks: BackgroundTasks, db: Sessi
 
     return {"message": "Withdrawal Initiated successfully"}
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True, workers=2)
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True, workers=2)
