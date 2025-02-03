@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 
-from xenon import create_wallet, import_wallet, get_gas_to_usdt
+from xenon import create_wallet, import_wallet, get_gas_to_usdc
 from schema import WalletImportRequest, InitiatePaymentRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut, CreateCheckoutRequest, InitiateCheckout
 from database import SessionLocal, engine, get_db
 from models import Base, Business, Wallet, Payment, Transaction, Analytics
@@ -35,6 +35,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 
 def transacts(data, db):
     url = data["webhook"]
@@ -223,13 +225,13 @@ def get_payment(paymentId: str, db: Session = Depends(get_db), business: Busines
         raise HTTPException(status_code=403, detail="You are not authorized to view this payment")
 
     amount = payment.amount
-    total_amount = get_gas_to_usdt(amount)
+    total_amount = get_gas_to_usdc(amount)
 
     post_data = {
         "payment_id": payment.payment_id,
         "business_name": payment.business.business_name,
         "business_id": payment.user_id,
-        "gas_amount": amount,
+        "eth_amount": amount,
         "total_amount": total_amount,
     }
     return post_data

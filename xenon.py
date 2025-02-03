@@ -28,25 +28,26 @@ class HexJsonEncoder:
         return serialized
 
 # RPC endpoint of the Ethereum network
-rpc_url = "https://mainnet-1.rpc.banelabs.org"
+rpc_url = "https://mainnet.base.org"
+"https://sepolia.base.org"
 # "https://neoxt4seed1.ngd.network"
 ws_url = "wss://neoxt4wss1.ngd.network" 
 web3 = Web3(Web3.HTTPProvider(rpc_url))
 
 
-def get_gas_to_usdt(value):
+def get_gas_to_usdc(value):
     # try:
         if value == 0:
             return 0.0  # Return 0 directly for input value 0
         
         # API Request
-        url = "https://min-api.cryptocompare.com/data/price?fsym=GAS&tsyms=USDT"
+        url = "https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USDC"
         response = requests.get(url, timeout=10)
         response.raise_for_status()  # Raise an error for HTTP issues
         data = response.json()
-        usdt_val = data.get('USDT')  # Safely get 'USDT' value
+        usdt_val = data.get('USDC')  # Safely get 'USDT' value
         if usdt_val is None:
-            return "Error: 'USDT' key not found in API response."
+            return "Error: 'USDC' key not found in API response."
         # Calculate equivalent USDT balance
         usdt_balance = float(value) * usdt_val
         # Format the output for readability
@@ -79,11 +80,11 @@ def import_wallet(private_key_user):
     
     # Check balance
     balance = web3.eth.get_balance(account.address) / 10**18
-    usdt_balance = get_gas_to_usdt(balance)
+    usdt_balance = get_gas_to_usdc(balance)
     return {"wallet_address":account.address, "USDT":usdt_balance, "GAS":balance}
 
 
-def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ether):
+def send_base_eth(sender_address, private_key, recipient_address, amount_in_ether):
 
     amount_in_wei = web3.to_wei(amount_in_ether, 'ether')
 
@@ -96,7 +97,7 @@ def send_neox_gas(sender_address, private_key, recipient_address, amount_in_ethe
         'value': amount_in_wei,
         'gas': 21000,  # Standard gas limit for ETH transfers
         'gasPrice': web3.to_wei('30', 'gwei'),  # Replace '30' with current gas price in Gwei
-        'chainId':  47763,
+        'chainId':  8453,
         # 12227332  # Mainnet chain ID. Use 3, 4, or 5 for testnets like Ropsten, Rinkeby, or Goerli
     }
 
@@ -157,8 +158,8 @@ def get_wallet_balances(wallet_address):
     
     # Get GAS balance
     gas_balance = web3.eth.get_balance(wallet_address) / 10**18
-    balances["GAS"] = gas_balance
-    balances["USDT"] = get_gas_to_usdt(gas_balance)
+    balances["ETH"] = gas_balance
+    balances["USDT"] = get_gas_to_usdc(gas_balance)
     
     # Get other token balances
     # for token_symbol, contract_address in TOKEN_CONTRACTS.items():

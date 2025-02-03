@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 from sqlalchemy import or_
 
-from xenon import create_wallet, import_wallet, get_gas_to_usdt, get_wallet_balances, send_neox_gas
+from xenon import create_wallet, import_wallet, get_gas_to_usdc, get_wallet_balances, send_base_eth
 from schema import WalletImportRequest, CreateBusiness, Token, TokenData, UserInDB, LoginBusiness, BusinessOut, CreateCheckoutRequest, InitiateCheckout, WithdrawRequest
 from database import SessionLocal, engine, get_db
 from models import Base, Business, Wallet, Payment, Transaction, Analytics
@@ -22,7 +22,6 @@ import monitor
 import api
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dotenv import load_dotenv
-import uvicorn
 
 load_dotenv()
 
@@ -56,6 +55,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+FRONTEND_URL = os.getenv("FRONTEND_URL")
 
 def transacts(data,  db: Session = Depends(get_db)):
     print("transacts")
@@ -193,12 +194,20 @@ def get_user(db, email: str):
     user = db.query(Business).filter(Business.email == email).first()
     if user:
         return UserInDB(**to_dict(user))
-    return None
+    raise HTTPException(
+            status_code=401,
+            detail="Account not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 def authenticate_user(db, email: str, password: str):
     user = get_user(db, email)
     if not user or not verify_password(password, user.password_hash):
-        return None
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -232,6 +241,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 def read_root():
     return {"message": "Welcome to LianFlow - A NeoX Crypto Payment Gateway for businesses!"}
 
+@app.head("/")
+def uptimer():
+    return {"status": "ok"}
+
 
 @app.post("/users/signup", tags=["Auth"])
 def create_user(body: CreateBusiness, db: Session = Depends(get_db)):
@@ -261,7 +274,8 @@ def create_user(body: CreateBusiness, db: Session = Depends(get_db)):
     db.refresh(wallet)
     return {
         "user_id": user.user_id,
-        "api_key": api_key
+        "api_key": api_key,
+        "access_token": create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     }
 
 @app.post("/login", response_model=Token, tags=["Auth"])
@@ -270,8 +284,8 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     user = authenticate_user(db, usr.email, form_data.password)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            status_code=401,
+            detail="Email or Password incorrect",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(data={"sub": user.email}, 
@@ -413,7 +427,7 @@ def checkout_create(body: CreateCheckoutRequest, db: Session = Depends(get_db), 
     db.commit()
     db.refresh(payment)
 
-    url = f"https://lianflow.vercel.app/checkout/{payment.payment_id}"
+    url = f"{FRONTEND_URL}/checkout/{payment.payment_id}"
 
     post_data = {
         "payment_id": payment.payment_id,
@@ -431,7 +445,7 @@ def get_payment(paymentId: str, db: Session = Depends(get_db),):
         raise HTTPException(status_code=404, detail="No Payment with this ID")
     
     amount = payment.amount
-    total_amount = get_gas_to_usdt(amount)
+    total_amount = get_gas_to_usdc(amount)
 
     post_data = to_dict(payment)
     post_data["business_name"] = payment.business.business_name
@@ -454,7 +468,7 @@ def initiate_checkout_payment(Data: InitiateCheckout, background_tasks: Backgrou
     db.refresh(payment)
 
     amount = payment.amount
-    total_amount = get_gas_to_usdt(amount)
+    total_amount = get_gas_to_usdc(amount)
 
     post_data = {
         "sender": Data.sender_address,
@@ -583,7 +597,7 @@ def payment_status(paymentId: str, db: Session = Depends(get_db)):
     return post_data
 
 def withdraw_neox(wallet, amount, receiver_address, db: Session = get_db()):
-    result = send_neox_gas(wallet.address, wallet.private_key, receiver_address, amount)
+    result = send_base_eth(wallet.address, wallet.private_key, receiver_address, amount)
     receipt = result
     gas_used = receipt['gasUsed']
     gas_price = receipt['effectiveGasPrice']
@@ -621,6 +635,6 @@ def withdraw(body: WithdrawRequest, background_tasks: BackgroundTasks, db: Sessi
 
     return {"message": "Withdrawal Initiated successfully"}
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True, workers=2)
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="127.0.0.1", port=5000, reload=True, workers=2)

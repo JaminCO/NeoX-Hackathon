@@ -12,7 +12,7 @@ import time
 
 
 # # Wallet or contract address to monitor
-rpc_url = "https://mainnet-1.rpc.banelabs.org"
+rpc_url = "https://sepolia.base.org"
 # "https://neoxt4seed1.ngd.network"
 
 
@@ -21,12 +21,12 @@ w3 = Web3(Web3.HTTPProvider(rpc_url))
 
 
 # Function to fetch ETH to USDT price from CoinGecko
-def get_gas_to_usdt(value):
-    url = "https://min-api.cryptocompare.com/data/price?fsym=GAS&tsyms=USDT"
+def get_gas_to_usdc(value):
+    url = "https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USDC"
     response = requests.get(url)
     data = response.json()
-    usdt_val = data['USDT']
-    usdt_balance = (value / 10**18) * usdt_val
+    usdC_val = data['USDC']
+    usdt_balance = (value / 10**18) * usdC_val
     return usdt_balance
 
 # Poll for new pending transactions
@@ -67,7 +67,7 @@ def check_transaction(tx_hash, sender_address, receiver_address, target_amount):
                     # print(f"From: {tx['from']}")
                     # print(f"To: {tx['to']}")
                     # print(f"Amount: {tx['value'] / 10**18} GAS")
-                    # print(f"Amount: {get_gas_to_usdt(tx['value'])} USDT \n")
+                    # print(f"Amount: {get_gas_to_usdc(tx['value'])} USDT \n")
                     return tx
     except Exception as e:
         print(f"Error fetching transaction {tx_hash}: {e}")
